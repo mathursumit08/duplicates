@@ -84,3 +84,8 @@ with open(txt_output, "w") as f_txt:
 print(f"\n📊 Summary")
 print(f"Total files checked: {len(file_counts)}")
 for fname, count in file_counts.items():
+    print(f"  - {fname}: {count} record(s)")
+print(f"Combined total records: {total_records}")
+print(f"Found {len(duplicates)} duplicate key(s), {duplicate_count} total duplicate rows.")
+print(f"📁 JSON saved to: {json_output}")
+print(f"📝 TXT summary saved to: {txt_output}")
