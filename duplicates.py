@@ -2,7 +2,6 @@ import json
 from collections import defaultdict
 from pathlib import Path
 from datetime import datetime
-import os
 
 # Load config
 with open("config.json", "r") as f:
@@ -10,6 +9,7 @@ with open("config.json", "r") as f:
 
 json_files = config.get("json_files", [])
 dup_keys = config.get("duplicate_keys", [])
+root_path = config.get("json_root_path", [])
 
 if not json_files or not dup_keys:
     raise ValueError("Missing 'json_files' or 'duplicate_keys' in config")
@@ -17,6 +17,15 @@ if not json_files or not dup_keys:
 # Create output directory
 output_dir = Path("duplicates")
 output_dir.mkdir(exist_ok=True)
+
+# Helper to walk nested keys like ["RecordSet", "Items"]
+def extract_root(data, path):
+    for key in path:
+        if isinstance(data, dict):
+            data = data.get(key)
+        else:
+            return None
+    return data if isinstance(data, list) else None
 
 # Combine data and track counts
 combined_data = []
@@ -27,16 +36,19 @@ for filepath in json_files:
     if not path.exists():
         print(f"[WARN] File not found: {filepath}")
         continue
-    with open(path, "r", encoding="utf-8") as f:
+
+    with open(path, "r", encoding="utf-8", errors="ignore") as f:
         try:
             data = json.load(f)
-            if isinstance(data, list):
-                combined_data.extend(data)
-                file_counts[filepath] = len(data)
+            records = extract_root(data, root_path) if root_path else data
+            if isinstance(records, list):
+                combined_data.extend(records)
+                file_counts[filepath] = len(records)
+                print(f"[INFO] Loaded {len(records)} records from {filepath}")
             else:
-                print(f"[WARN] File does not contain a list: {filepath}")
+                print(f"[WARN] No list found at path {root_path} in {filepath}")
         except json.JSONDecodeError as e:
-            print(f"[ERROR] JSON decode error in {filepath}: {e}")
+            print(f"[ERROR] Failed to decode {filepath}: {e}")
 
 total_records = len(combined_data)
 
@@ -54,7 +66,7 @@ for item in combined_data:
 duplicates = {k: v for k, v in seen.items() if len(v) > 1}
 duplicate_count = sum(len(v) for v in duplicates.values())
 
-# Timestamped output paths
+# Timestamped output
 timestamp = datetime.now().strftime("%Y-%m-%d_%H%M")
 json_output = output_dir / f"duplicates_{timestamp}.json"
 txt_output = output_dir / f"duplicates_{timestamp}.txt"
@@ -66,7 +78,7 @@ with open(json_output, "w", encoding="utf-8") as f_json:
 # Write TXT
 with open(txt_output, "w", encoding="utf-8") as f_txt:
     f_txt.write(f"=== Duplicate Summary ===\n")
-    f_txt.write(f"Checked files: {len(file_counts)}\n")
+    f_txt.write(f"Files checked: {len(file_counts)}\n")
     f_txt.write(f"Total records combined: {total_records}\n")
     f_txt.write(f"Duplicate keys found: {len(duplicates)}\n")
     f_txt.write(f"Total duplicate rows: {duplicate_count}\n\n")
@@ -85,13 +97,11 @@ with open(txt_output, "w", encoding="utf-8") as f_txt:
     else:
         f_txt.write("\nNo duplicates found.\n")
 
-# Console output
+# Console summary
 print("\nSummary")
-print(f"Total files checked: {len(file_counts)}")
-for fname, count in file_counts.items():
-    print(f"  - {fname}: {count} record(s)")
+print(f"Files checked: {len(file_counts)}")
 print(f"Total records: {total_records}")
 print(f"Duplicate keys found: {len(duplicates)}")
 print(f"Duplicate rows: {duplicate_count}")
-print(f"JSON saved to: {json_output}")
-print(f"TXT summary saved to: {txt_output}")
+print(f"JSON output: {json_output}")
+print(f"TXT output:  {txt_output}")
