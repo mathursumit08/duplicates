@@ -1,8 +1,9 @@
 {
   "json_files": [
-    "data/file1.json",
-    "data/file2.json",
-    "data/file3.json"
+    "data/2030-StoreInvoicePromotionsPFSnacksEvenIDP-2025-05-10-10642.json",
+    "data/2031-StoreInvoicePromotionsPFBakeryEvenIDP-2025-05-10-10642.json"
+
   ],
-  "duplicate_keys": ["itemCode", "storeNum"]
+  "duplicate_keys": ["IDPNum","SAPStoreNum","DealNum","TargetItemCode","SourceItemCode"],
+  "json_root_path": ["RecordSet", "Items"]
 }

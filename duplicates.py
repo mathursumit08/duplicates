@@ -18,7 +18,7 @@ if not json_files or not dup_keys:
 output_dir = Path("duplicates")
 output_dir.mkdir(exist_ok=True)
 
-# Helper to walk nested keys like ["RecordSet", "Items"]
+# Extract nested list from root path (e.g., ["RecordSet", "Items"])
 def extract_root(data, path):
     for key in path:
         if isinstance(data, dict):
@@ -27,7 +27,14 @@ def extract_root(data, path):
             return None
     return data if isinstance(data, list) else None
 
-# Combine data and track counts
+# Normalize keys (case-insensitive, trimmed)
+def build_composite_key(item, keys):
+    try:
+        return tuple(str(item.get(k)).strip().lower() for k in keys)
+    except Exception:
+        return tuple("MISSING" for _ in keys)
+
+# Combine all data
 combined_data = []
 file_counts = {}
 
@@ -42,7 +49,9 @@ for filepath in json_files:
             data = json.load(f)
             records = extract_root(data, root_path) if root_path else data
             if isinstance(records, list):
-                combined_data.extend(records)
+                for record in records:
+                    record["_source_file"] = str(filepath)
+                    combined_data.append(record)
                 file_counts[filepath] = len(records)
                 print(f"[INFO] Loaded {len(records)} records from {filepath}")
             else:
@@ -54,26 +63,26 @@ total_records = len(combined_data)
 
 # Detect duplicates
 seen = defaultdict(list)
-
-def build_composite_key(item, keys):
-    return tuple(item.get(k) for k in keys)
-
 for item in combined_data:
     key = build_composite_key(item, dup_keys)
-    if None not in key:
-        seen[key].append(item)
+    if "MISSING" in key or None in key:
+        continue
+    seen[key].append(item)
 
 duplicates = {k: v for k, v in seen.items() if len(v) > 1}
 duplicate_count = sum(len(v) for v in duplicates.values())
 
-# Timestamped output
+# Output paths
 timestamp = datetime.now().strftime("%Y-%m-%d_%H%M")
 json_output = output_dir / f"duplicates_{timestamp}.json"
 txt_output = output_dir / f"duplicates_{timestamp}.txt"
 
-# Write JSON
+# Write JSON (convert key tuples to strings)
+json_compatible_duplicates = {
+    str(k): v for k, v in duplicates.items()
+}
 with open(json_output, "w", encoding="utf-8") as f_json:
-    json.dump(duplicates, f_json, indent=2)
+    json.dump(json_compatible_duplicates, f_json, indent=2)
 
 # Write TXT
 with open(txt_output, "w", encoding="utf-8") as f_txt:
@@ -92,7 +101,8 @@ with open(txt_output, "w", encoding="utf-8") as f_txt:
         for key, items in duplicates.items():
             f_txt.write(f"\nDuplicate Key: {key}\n")
             for i, item in enumerate(items, 1):
-                f_txt.write(f"  #{i}: {json.dumps(item, indent=2)}\n")
+                source = item.get("_source_file", "unknown")
+                f_txt.write(f"  #{i} (from {source}): {json.dumps(item, indent=2)}\n")
             f_txt.write("\n" + "-" * 40 + "\n")
     else:
         f_txt.write("\nNo duplicates found.\n")
